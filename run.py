@@ -23,7 +23,7 @@ limit_gpu_mem(C.DEVICE, C.MAX_MEMORY_GIB)
 
 from huggingface_hub import login, snapshot_download
 
-login(token="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")
+login(token="your_token_here")
 ckpt_dir = snapshot_download(C.MODEL_ID, allow_patterns=["*.safetensors", "*.json", "*.model"])
 
 from model_qwen import build_model
