@@ -2,7 +2,7 @@
 
 Training a 7B model in 7GB VRAM. LoRA adapters live on GPU permanently; base weights stream from disk one layer at a time with prefetch. The code is ~200 lines. Most of the work was profiling and debugging async correctness.
 
-The optimizations here don't produce dramatic speedups — the bottlenecks are too extreme for that. The value of this project is in the analysis: understanding why each optimization helps or doesn't, debugging timing-dependent correctness issues, and debugging timing-dependent correctness issues, and making sense of counterintuitive profiler traces.
+The optimizations here don't produce dramatic speedups — the bottlenecks are too extreme for that. The value of this project is in the analysis: understanding why each optimization helps or doesn't, debugging timing-dependent correctness issues, and making sense of counterintuitive profiler traces.
 
 ## Results
 
