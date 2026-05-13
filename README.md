@@ -97,27 +97,28 @@ with torch.cuda.stream(self._stream):
 
 Result: **49.5s**. Transfer is now almost fully hidden behind compute. We've squeezed out what we can — the remaining time is pure computation.
 
-### The `record_stream` bug
-
-At this point I noticed that with prefetch enabled, training loss diverged. Only in bf16. Values weren't NaN — just subtly wrong.
-
-First instinct: T4 emulates bf16 through fp32 on CUDA cores, maybe there's some precision issue, some randomness in the emulation. That would be a reasonable explanation to accept and move on.
-
-But something felt off, so I kept digging. Four hours later: the CUDA caching allocator was reusing memory from the prefetch stream while the compute stream was still reading it.
-
-The mechanism: when you allocate a tensor in stream B and use it in stream A, PyTorch's caching allocator **only knows about stream B**. Once stream B moves on, the allocator considers that memory free — even if stream A is still reading it. Silent data corruption.
-
-Why bf16 specifically? Compute is slow enough (no tensor cores, fp32 emulation) that the prefetch stream completes and its memory gets reclaimed *while* the compute stream is still reading it. In fp16, tensor cores consume data so fast the race never triggers. Same buggy code, no visible corruption.
-
-Fix:
-
-```python
-current = torch.cuda.current_stream(self.device)
-for v in self._cache.values():
-    v.record_stream(current)
-```
-
-Tell the allocator these tensors are alive in the compute stream too. Glad I didn't blame precision and move on — this would have bitten me later in ways much harder to debug.
+> [!important]
+> The `record_stream` bug:
+>
+> At this point I noticed that with prefetch enabled, training loss diverged. Only in bf16. Values weren't NaN — just subtly wrong.
+>
+> First instinct: T4 emulates bf16 through fp32 on CUDA cores, maybe there's some precision issue, some randomness in the emulation. That would be a reasonable explanation to accept and move on.
+> 
+> But something felt off, so I kept digging. Four hours later: the CUDA caching allocator was reusing memory from the prefetch stream while the compute stream was still reading it.
+>
+>The mechanism: when you allocate a tensor in stream B and use it in stream A, PyTorch's caching allocator **only knows about stream B**. Once stream B moves on, the allocator considers that memory free — even if stream A is still reading it. Silent data corruption.
+>
+> Why bf16 specifically? Compute is slow enough (no tensor cores, fp32 emulation) that the prefetch stream completes and its memory gets reclaimed *while* the compute stream is still reading it. In fp16, tensor cores consume data so fast the race never triggers. Same buggy code, no visible corruption.
+> 
+> Fix:
+> 
+> ```python
+> current = torch.cuda.current_stream(self.device)
+> for v in self._cache.values():
+>    v.record_stream(current)
+> ```
+> 
+> Tell the allocator these tensors are alive in the compute stream too. Glad I didn't blame precision and move on — this would have bitten me later in ways much harder to debug.
 
 ---
 
